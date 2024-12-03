@@ -16,7 +16,9 @@ def ping():
     """
     Endpoint to handle incoming ping requests.
     """
+    threading.Thread(target=send_ping, daemon=True).start()
     return {"message": "pong"}
+
 
 
 def send_ping():
@@ -24,18 +26,17 @@ def send_ping():
     Function to send a ping request to the other server.
     """
     global game_running, pong_time_ms, target_instance_url
-    while game_running:
-        try:
-            response = requests.get(f"{target_instance_url}/ping")
-            if response.status_code == 200:
-                print(f"Received: {response.json()}")
-        except Exception as e:
-            print(f"Failed to send ping: {e}")
+    try:
         time.sleep(pong_time_ms / 1000)
+        response = requests.get(f"{target_instance_url}/ping")
+        if response.status_code == 200:
+            print(f"Received: {response.json()}")
+    except Exception as e:
+        print(f"Failed to send ping: {e}")
 
 
 @app.post("/start")
-def start_game(pong_interval: int, target_url: str):
+def start_game(pong_interval: int, target_url: str, throw_ball: bool):
     """
     Starts the ping-pong game with the given interval and target instance.
     """
@@ -43,7 +44,8 @@ def start_game(pong_interval: int, target_url: str):
     pong_time_ms = pong_interval
     target_instance_url = target_url
     game_running = True
-    threading.Thread(target=send_ping, daemon=True).start()
+    if throw_ball:
+        threading.Thread(target=send_ping, daemon=True).start()
     return {"status": "Game started", "pong_time_ms": pong_time_ms}
 
 

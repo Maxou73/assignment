@@ -5,13 +5,19 @@ import os
 import time
 import platform
 import signal
-
+import socket
 
 # Base URLs for the instances
-INSTANCE_1_URL = "http://localhost:8000"
-INSTANCE_2_URL = "http://localhost:8001"
+
+global INSTANCE_1_URL, INSTANCE_2_URL, PORT1, PORT2
 # Paths to the server files (update these paths as per your setup)
 SERVER_SCRIPT = "server.py"  # The FastAPI server script file
+
+def is_port_occupied(port, host='0.0.0.0'):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex((host, port)) == 0
+
+
 
 
 def start_servers():
@@ -19,23 +25,28 @@ def start_servers():
     Start both FastAPI servers as background processes.
     """
     try:
-
-
+        PORT1 = 8000
+        PORT2 = 8001
         os_name = platform.system()
         current_dir = os.getcwd()
+        while is_port_occupied(PORT1):
+            PORT1 += 2
+            PORT2 += 2
+
+
         if os_name == "Windows":
 
             # Start server 1 on port 8000
-            subprocess.Popen(["start", "cmd", "/k","uvicorn server:app --host 0.0.0.0 --port 8000"], shell=True)
+            subprocess.Popen(["start", "cmd", "/k","uvicorn server:app --host 0.0.0.0 --port " + str(PORT1)], shell=True)
 
             # Start server 2 on port 8001
-            subprocess.Popen(["start", "cmd", "/k","uvicorn server:app --host 0.0.0.0 --port 8001"], shell=True)
+            subprocess.Popen(["start", "cmd", "/k","uvicorn server:app --host 0.0.0.0 --port " + str(PORT2)], shell=True)
 
         elif os_name == "Darwin":  # macOS
             # Start server 1 on port 8000
             apple_script = f'''
             tell application "Terminal"
-                do script "cd '{current_dir}' && uvicorn server:app --host 0.0.0.0 --port 8000"
+                do script "cd '{current_dir}' && uvicorn server:app --host 0.0.0.0 --port {str(PORT1)}"
             end tell
             '''
             subprocess.run(["osascript", "-e", apple_script])
@@ -44,7 +55,7 @@ def start_servers():
             apple_script = f'''
             tell application "Terminal"
 
-                do script "cd '{current_dir}' && uvicorn server:app --host 0.0.0.0 --port 8001"
+                do script "cd '{current_dir}' && uvicorn server:app --host 0.0.0.0 --port {str(PORT2)}"
             end tell
             '''
             subprocess.run(["osascript", "-e", apple_script])
@@ -53,6 +64,7 @@ def start_servers():
         print("Servers started successfully.")
     except Exception as e:
         print(f"Failed to start servers: {e}")
+    return PORT1, PORT2
 
 
 def stop_server(port):
@@ -134,10 +146,14 @@ def start(pong_time_ms):
     """
     Start the game with the given pong interval.
     """
-    start_servers()  # Ensure servers are running
+    PORT1, PORT2 = start_servers()
+     # Ensure servers are running
+
+    INSTANCE_1_URL = "http://localhost:" + str(PORT1)
+    INSTANCE_2_URL = "http://localhost:" + str(PORT2)
     try:
-        requests.post(f"{INSTANCE_1_URL}/start", params={"pong_interval": pong_time_ms, "target_url": INSTANCE_2_URL})
-        requests.post(f"{INSTANCE_2_URL}/start", params={"pong_interval": pong_time_ms, "target_url": INSTANCE_1_URL})
+        requests.post(f"{INSTANCE_1_URL}/start", params={"pong_interval": pong_time_ms, "target_url": INSTANCE_2_URL, "throw_ball": True})
+        requests.post(f"{INSTANCE_2_URL}/start", params={"pong_interval": pong_time_ms, "target_url": INSTANCE_1_URL, "throw_ball": False})
         print(f"Game started with interval: {pong_time_ms} ms")
     except Exception as e:
         print(f"Error starting the game: {e}")
@@ -165,8 +181,8 @@ def stop():
     try:
         requests.post(f"{INSTANCE_1_URL}/stop")
         requests.post(f"{INSTANCE_2_URL}/stop")
-        stop_server(8000)
-        stop_server(8001)
+        stop_server(PORT1)
+        stop_server(PORT2)
         print("Game stopped.")
 
     except Exception as e:
